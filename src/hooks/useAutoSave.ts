@@ -14,14 +14,16 @@ export function useAutoSave() {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
-    return; // Uncomment to enable auto save
     if (!currentProjectId) return
+    const projectId = currentProjectId;
+
+    return; // Uncomment to enable auto save
 
     if (timerRef.current) clearTimeout(timerRef.current)
 
     timerRef.current = setTimeout(async () => {
       const record: ProjectRecord = {
-        id: currentProjectId,
+        id: projectId,
         name: projectName,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -31,7 +33,7 @@ export function useAutoSave() {
       await saveProject(record)
 
       if (floorplanImageBlob) {
-        await saveImage(currentProjectId, floorplanImageBlob)
+        await saveImage(projectId, floorplanImageBlob)
       }
     }, DEBOUNCE_MS)
 
