@@ -1,7 +1,6 @@
 import { nanoid } from 'nanoid'
 import { create } from 'zustand'
 import {
-  defaultLayerVisibility,
   type AppMode,
   type Calibration,
   type FloorplanCropPixels,
@@ -10,6 +9,10 @@ import {
   type PlacedFurniture,
   type ReferenceLine,
 } from '../types'
+import {
+  readStoredLayerVisibility,
+  writeStoredLayerVisibility,
+} from '../utils/layerVisibilityStorage'
 
 interface AppState {
   // Project
@@ -118,7 +121,7 @@ const initialProjectState = {
   selectedReferenceLineId: null as string | null,
   stageScale: 1,
   stagePosition: { x: 0, y: 0 },
-  layerVisibility: { ...defaultLayerVisibility },
+  layerVisibility: readStoredLayerVisibility(),
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -150,7 +153,6 @@ export const useAppStore = create<AppState>((set) => ({
       selectedFurnitureId: null,
       referenceLines: [],
       selectedReferenceLineId: null,
-      layerVisibility: { ...defaultLayerVisibility },
     }),
 
   // Calibration
@@ -254,12 +256,18 @@ export const useAppStore = create<AppState>((set) => ({
   setStageScale: (scale) => set({ stageScale: scale }),
   setStagePosition: (pos) => set({ stagePosition: pos }),
   setLayerVisibility: (updates) =>
-    set((s) => ({
-      layerVisibility: { ...s.layerVisibility, ...updates },
-    })),
+    set((s) => {
+      const layerVisibility = { ...s.layerVisibility, ...updates }
+      writeStoredLayerVisibility(layerVisibility)
+      return { layerVisibility }
+    }),
 
   // Project
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
   setProjectName: (name) => set({ projectName: name }),
-  resetProject: () => set({ ...initialProjectState }),
+  resetProject: () =>
+    set((s) => ({
+      ...initialProjectState,
+      layerVisibility: s.layerVisibility,
+    })),
 }))

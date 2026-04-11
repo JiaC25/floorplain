@@ -18,6 +18,9 @@ export function FurnitureRect({ item, calibration }: Props) {
     (s) => s.setSelectedReferenceLineId,
   )
   const updatePlacedFurniture = useAppStore((s) => s.updatePlacedFurniture)
+  const showDimensions = useAppStore(
+    (s) => s.layerVisibility.furnitureDimensions,
+  )
   const pushHistory = useHistoryStore((s) => s.push)
 
   const widthPx = cmToPixels(item.widthCm, calibration)
@@ -100,17 +103,19 @@ export function FurnitureRect({ item, calibration }: Props) {
         verticalAlign="middle"
         listening={false}
       />
-      <Text
-        width={widthPx}
-        height={depthPx * 0.35}
-        y={depthPx * 0.55}
-        text={`${item.widthCm} × ${item.depthCm}`}
-        fontSize={dimsSize}
-        fill="#475569"
-        align="center"
-        verticalAlign="middle"
-        listening={false}
-      />
+      {showDimensions && (
+        <Text
+          width={widthPx}
+          height={depthPx * 0.35}
+          y={depthPx * 0.55}
+          text={`${item.widthCm} × ${item.depthCm}`}
+          fontSize={dimsSize}
+          fill="#475569"
+          align="center"
+          verticalAlign="middle"
+          listening={false}
+        />
+      )}
     </Group>
   )
 }

@@ -46,7 +46,7 @@ export function FurnitureForm({ initial, onSave, onCancel, embedded = false }: P
         placeholder="Name (e.g. Queen Bed)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none"
+        className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none bg-white!"
         autoFocus
       />
       <div className="flex flex-col gap-2">
@@ -59,7 +59,7 @@ export function FurnitureForm({ initial, onSave, onCancel, embedded = false }: P
             placeholder="cm"
             value={widthCm}
             onChange={(e) => setWidthCm(e.target.value)}
-            className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none"
+            className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none bg-white!"
           />
         </div>
         <div className="flex flex-col gap-0.5">
@@ -71,7 +71,7 @@ export function FurnitureForm({ initial, onSave, onCancel, embedded = false }: P
             placeholder="cm"
             value={depthCm}
             onChange={(e) => setDepthCm(e.target.value)}
-            className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none"
+            className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none bg-white!"
           />
         </div>
       </div>
@@ -84,7 +84,7 @@ export function FurnitureForm({ initial, onSave, onCancel, embedded = false }: P
               type="button"
               onClick={() => setColor(c)}
               className={`h-5 w-5 rounded-full border-2 transition-transform ${
-                color === c ? 'scale-125 border-zinc-800' : 'border-transparent hover:scale-110'
+                color === c ? 'scale-120 border-zinc-700' : 'border-transparent hover:scale-110'
               }`}
               style={{ backgroundColor: c }}
             />
@@ -96,7 +96,7 @@ export function FurnitureForm({ initial, onSave, onCancel, embedded = false }: P
         placeholder="Notes (optional)"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none"
+        className="rounded border border-zinc-300 px-2 py-1 text-sm focus:border-blue-400 focus:outline-none bg-white!"
       />
       <div className="flex gap-2">
         <button

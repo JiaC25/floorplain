@@ -5,6 +5,7 @@ import { formatCm } from '../../utils/units'
 
 /** Persistent reference lines with real-distance labels (n/a if not calibrated). */
 export function ReferenceLinesOverlay() {
+  const mode = useAppStore((s) => s.mode)
   const referenceLines = useAppStore((s) => s.referenceLines)
   const selectedReferenceLineId = useAppStore((s) => s.selectedReferenceLineId)
   const calibration = useAppStore((s) => s.calibration)
@@ -19,6 +20,9 @@ export function ReferenceLinesOverlay() {
 
   if (!referenceLinesVisible || referenceLines.length === 0) return null
 
+  /** Match FurnitureRect: only capture clicks in default mode so calibration / measure / ref-line tools get the stage click. */
+  const interactive = mode === 'default'
+
   const labelFontSize = Math.max(13, 13 / Math.max(stageScale, 0.05))
   const labelPaddingX = Math.max(4, 4 / Math.max(stageScale, 0.05))
   const labelPaddingY = Math.max(2, 2 / Math.max(stageScale, 0.05))
@@ -32,7 +36,7 @@ export function ReferenceLinesOverlay() {
   }
 
   return (
-    <Group>
+    <Group listening={interactive}>
       {referenceLines.map((line) => {
         const p1 = line.point1
         const p2 = line.point2

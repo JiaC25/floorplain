@@ -412,7 +412,7 @@ export function Toolbar() {
 
         <div className="mx-2 h-5 w-px bg-zinc-200" />
 
-        <Button onClick={handleSave} variant="base" disabled={saveState === 'saving' || saveState === 'saved'}>
+        <Button onClick={handleSave} variant={floorplanImage && calibration ? 'primary' : 'base'} disabled={saveState === 'saving' || saveState === 'saved'}>
           <Save size={14} />
           <span className="ml-1">
             {saveState === 'saving'
@@ -464,7 +464,7 @@ export function Toolbar() {
               }
               className={`rounded px-3 py-1 text-sm font-medium ${
                 mode === 'calibrating'
-                  ? `${TOOL_ACTIVE}`
+                  ? `bg-amber-500! text-white! hover:bg-amber-600!`
                   : calibration
                     ? 'border border-green-300! bg-green-50! text-green-700! hover:bg-green-100!'
                     : 'border'
@@ -485,7 +485,7 @@ export function Toolbar() {
             <div className="mx-2 h-5 w-px bg-zinc-200" />
 
             {/* Tools */}
-            <div className="flex flex-1 items-center gap-2">
+            <div className="flex flex-1 items-center gap-1.5">
               <Button
                 onClick={handleReferenceLineToggle}
                 size="icon"
@@ -591,7 +591,7 @@ export function Toolbar() {
                   className={`rounded px-2 py-1 text-sm font-medium ${
                     visibilityMenuOpen ? TOOL_ACTIVE : TOOL_IDLE
                   }`}
-                  title="Show or hide furniture, calibration, and reference lines"
+                  title="Show or hide furniture, dimensions, calibration, and reference lines"
                   aria-label="Layer visibility"
                   aria-expanded={visibilityMenuOpen}
                   aria-haspopup="menu"
@@ -600,7 +600,7 @@ export function Toolbar() {
                 </Button>
                 {visibilityMenuOpen && (
                   <div
-                    className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-zinc-200 bg-white py-2 shadow-lg"
+                    className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-zinc-200 bg-white py-2 shadow-lg"
                     role="menu"
                     aria-label="Toggle layer visibility"
                   >
@@ -621,6 +621,26 @@ export function Toolbar() {
                             }
                           />
                           Furniture
+                        </label>
+                      </li>
+                      <li className="pl-7">
+                        <label
+                          className={`flex cursor-pointer items-center gap-2 py-1.5 text-xs text-zinc-600 ${
+                            !layerVisibility.furniture ? 'opacity-50' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                            checked={layerVisibility.furnitureDimensions}
+                            disabled={!layerVisibility.furniture}
+                            onChange={(e) =>
+                              setLayerVisibility({
+                                furnitureDimensions: e.target.checked,
+                              })
+                            }
+                          />
+                          Show dimensions (W × D)
                         </label>
                       </li>
                       <li>
@@ -675,7 +695,7 @@ export function Toolbar() {
         )}
 
         {/* Zoom */}
-        <div className="flex items-center bg-gray-50 rounded-md border border-zinc-200 ml-auto">
+        <div className="flex items-center bg-zinc-50 rounded-md border border-zinc-200 ml-auto">
           <button
             onClick={() => handleZoom('out')}
             className="px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 border-r border-zinc-200"
@@ -685,7 +705,7 @@ export function Toolbar() {
           </button>
           <button
             onClick={() => handleZoom('reset')}
-            className="min-w-14 px-2 py-1 text-center text-xs text-zinc-500 hover:bg-zinc-100 border-r border-zinc-200"
+            className="min-w-14 px-2 py-1 text-center text-xs text-zinc-600 hover:bg-zinc-100 border-r border-zinc-200"
             title="Reset zoom"
           >
             {Math.round(stageScale * 100)}%

@@ -62,12 +62,15 @@ export type AppMode =
 /** Canvas overlay visibility (floorplan always visible). */
 export interface LayerVisibility {
   furniture: boolean
+  /** Width × depth labels on placed furniture blocks (name is always shown). */
+  furnitureDimensions: boolean
   calibrationLine: boolean
   referenceLines: boolean
 }
 
 export const defaultLayerVisibility: LayerVisibility = {
   furniture: true,
+  furnitureDimensions: false,
   calibrationLine: true,
   referenceLines: true,
 }
