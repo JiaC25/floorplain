@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { nanoid } from 'nanoid'
 import { Trash2 } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
@@ -6,6 +6,10 @@ import { useHistoryStore } from '../../stores/useHistoryStore'
 import { FurnitureForm } from './FurnitureForm'
 import { saveTemplate, deleteTemplate } from '../../db/furnitureStorage'
 import type { FurnitureTemplate } from '../../types'
+
+function colorSortKey(color: string) {
+  return color.trim().toLowerCase()
+}
 
 export function FurnitureLibrary() {
   const furnitureLibrary = useAppStore((s) => s.furnitureLibrary)
@@ -20,6 +24,14 @@ export function FurnitureLibrary() {
 
   const [showForm, setShowForm] = useState(false)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+
+  const sortedLibrary = useMemo(() => {
+    return [...furnitureLibrary].sort((a, b) => {
+      const byColor = colorSortKey(a.color).localeCompare(colorSortKey(b.color))
+      if (byColor !== 0) return byColor
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    })
+  }, [furnitureLibrary])
 
   const handleAdd = async (data: Omit<FurnitureTemplate, 'id'>) => {
     const template: FurnitureTemplate = { id: nanoid(), ...data }
@@ -91,7 +103,7 @@ export function FurnitureLibrary() {
         </p>
       ) : (
         <ul className="flex flex-col gap-1">
-          {furnitureLibrary.map((item) => {
+          {sortedLibrary.map((item) => {
             const isEditing = editingItemId === item.id
             if (isEditing) {
               return (
