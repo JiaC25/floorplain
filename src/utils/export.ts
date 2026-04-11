@@ -1,4 +1,10 @@
-import type { Calibration, FurnitureTemplate, PlacedFurniture } from '../types'
+import type {
+  Calibration,
+  FloorplanCropPixels,
+  FurnitureTemplate,
+  PlacedFurniture,
+  ReferenceLine,
+} from '../types'
 
 interface ExportedProject {
   version: 1
@@ -6,7 +12,12 @@ interface ExportedProject {
   calibration?: Calibration
   placedFurniture: PlacedFurniture[]
   furnitureLibrary: FurnitureTemplate[]
+  /** Cropped raster shown on canvas */
   floorplanImageDataUrl?: string
+  /** Full uploaded image before crop (when present, enables re-crop after import) */
+  floorplanOriginalDataUrl?: string
+  floorplanCrop?: FloorplanCropPixels
+  referenceLines?: ReferenceLine[]
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -35,6 +46,9 @@ export async function exportProject(opts: {
   placedFurniture: PlacedFurniture[]
   furnitureLibrary: FurnitureTemplate[]
   floorplanImageBlob?: Blob | null
+  floorplanOriginalBlob?: Blob | null
+  floorplanCrop?: FloorplanCropPixels | null
+  referenceLines?: ReferenceLine[]
 }): Promise<void> {
   const data: ExportedProject = {
     version: 1,
@@ -42,10 +56,17 @@ export async function exportProject(opts: {
     calibration: opts.calibration ?? undefined,
     placedFurniture: opts.placedFurniture,
     furnitureLibrary: opts.furnitureLibrary,
+    referenceLines: opts.referenceLines,
   }
 
   if (opts.floorplanImageBlob) {
     data.floorplanImageDataUrl = await blobToDataUrl(opts.floorplanImageBlob)
+  }
+  if (opts.floorplanOriginalBlob) {
+    data.floorplanOriginalDataUrl = await blobToDataUrl(opts.floorplanOriginalBlob)
+  }
+  if (opts.floorplanCrop) {
+    data.floorplanCrop = opts.floorplanCrop
   }
 
   const json = JSON.stringify(data, null, 2)
@@ -66,6 +87,9 @@ export async function importProject(
   placedFurniture: PlacedFurniture[]
   furnitureLibrary: FurnitureTemplate[]
   floorplanImageBlob?: Blob
+  floorplanOriginalBlob?: Blob
+  floorplanCrop?: FloorplanCropPixels
+  referenceLines?: ReferenceLine[]
 }> {
   const text = await file.text()
   const data = JSON.parse(text) as ExportedProject
@@ -82,5 +106,10 @@ export async function importProject(
     floorplanImageBlob: data.floorplanImageDataUrl
       ? dataUrlToBlob(data.floorplanImageDataUrl)
       : undefined,
+    floorplanOriginalBlob: data.floorplanOriginalDataUrl
+      ? dataUrlToBlob(data.floorplanOriginalDataUrl)
+      : undefined,
+    floorplanCrop: data.floorplanCrop,
+    referenceLines: data.referenceLines,
   }
 }

@@ -1,22 +1,10 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../stores/useAppStore'
 import { loadAllTemplates } from '../db/furnitureStorage'
-import { loadAllProjects, loadImage } from '../db/projectStorage'
+import { loadAllProjects, loadProject } from '../db/projectStorage'
+import { hydrateFloorplanFromProject } from '../utils/hydrateFloorplan'
 
 const LAST_PROJECT_KEY = 'floorplain:lastProjectId'
-
-function blobToImage(blob: Blob): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(blob)
-    img.onload = () => {
-      resolve(img)
-      URL.revokeObjectURL(url)
-    }
-    img.onerror = reject
-    img.src = url
-  })
-}
 
 export function useInitializeApp() {
   const setFurnitureLibrary = useAppStore((s) => s.setFurnitureLibrary)
@@ -24,9 +12,10 @@ export function useInitializeApp() {
   const setCurrentProjectId = useAppStore((s) => s.setCurrentProjectId)
   const setProjectName = useAppStore((s) => s.setProjectName)
   const setPlacedFurniture = useAppStore((s) => s.setPlacedFurniture)
+  const setReferenceLines = useAppStore((s) => s.setReferenceLines)
   const setCalibration = useAppStore((s) => s.setCalibration)
   const clearCalibration = useAppStore((s) => s.clearCalibration)
-  const setFloorplanImage = useAppStore((s) => s.setFloorplanImage)
+  const setFloorplanComplete = useAppStore((s) => s.setFloorplanComplete)
   const clearFloorplan = useAppStore((s) => s.clearFloorplan)
   const setMode = useAppStore((s) => s.setMode)
 
@@ -47,6 +36,7 @@ export function useInitializeApp() {
       setCurrentProjectId(preferred.id)
       setProjectName(preferred.name)
       setPlacedFurniture(preferred.placedFurniture)
+      setReferenceLines(preferred.referenceLines ?? [])
 
       if (preferred.calibration) {
         setCalibration(preferred.calibration)
@@ -54,10 +44,14 @@ export function useInitializeApp() {
         clearCalibration()
       }
 
-      const blob = await loadImage(preferred.id)
-      if (blob) {
-        const img = await blobToImage(blob)
-        setFloorplanImage(img, blob)
+      const project = await loadProject(preferred.id)
+      if (project) {
+        await hydrateFloorplanFromProject(
+          preferred.id,
+          project,
+          setFloorplanComplete,
+          clearFloorplan,
+        )
       } else {
         clearFloorplan()
       }
@@ -73,9 +67,10 @@ export function useInitializeApp() {
     setCurrentProjectId,
     setProjectName,
     setPlacedFurniture,
+    setReferenceLines,
     setCalibration,
     clearCalibration,
-    setFloorplanImage,
+    setFloorplanComplete,
     clearFloorplan,
     setMode,
   ])

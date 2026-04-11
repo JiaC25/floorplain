@@ -1,9 +1,14 @@
+import { nanoid } from 'nanoid'
 import { create } from 'zustand'
-import type {
-  AppMode,
-  Calibration,
-  FurnitureTemplate,
-  PlacedFurniture,
+import {
+  defaultLayerVisibility,
+  type AppMode,
+  type Calibration,
+  type FloorplanCropPixels,
+  type FurnitureTemplate,
+  type LayerVisibility,
+  type PlacedFurniture,
+  type ReferenceLine,
 } from '../types'
 
 interface AppState {
@@ -14,6 +19,8 @@ interface AppState {
   // Floorplan
   floorplanImage: HTMLImageElement | null
   floorplanImageBlob: Blob | null
+  floorplanOriginalBlob: Blob | null
+  floorplanCropPixels: FloorplanCropPixels | null
 
   // Calibration
   calibration: Calibration | null
@@ -27,13 +34,23 @@ interface AppState {
   furnitureLibrary: FurnitureTemplate[]
   placedFurniture: PlacedFurniture[]
   selectedFurnitureId: string | null
+  referenceLines: ReferenceLine[]
+  referenceLinePoints: Array<{ x: number; y: number }>
+  selectedReferenceLineId: string | null
 
   // Canvas viewport
   stageScale: number
   stagePosition: { x: number; y: number }
+  layerVisibility: LayerVisibility
 
   // Actions - floorplan
   setFloorplanImage: (img: HTMLImageElement, blob: Blob) => void
+  setFloorplanComplete: (payload: {
+    floorplanImage: HTMLImageElement
+    floorplanImageBlob: Blob
+    floorplanOriginalBlob: Blob
+    floorplanCropPixels: FloorplanCropPixels
+  }) => void
   clearFloorplan: () => void
 
   // Actions - calibration
@@ -60,10 +77,20 @@ interface AppState {
   updatePlacedFurniture: (id: string, updates: Partial<PlacedFurniture>) => void
   removePlacedFurniture: (id: string) => void
   setSelectedFurnitureId: (id: string | null) => void
+  setReferenceLines: (lines: ReferenceLine[]) => void
+  setReferenceLineDraftPoints: (points: Array<{ x: number; y: number }>) => void
+  addReferenceLineSegment: (
+    point1: { x: number; y: number },
+    point2: { x: number; y: number },
+  ) => void
+  clearReferenceLines: () => void
+  setSelectedReferenceLineId: (id: string | null) => void
+  removeReferenceLine: (id: string) => void
 
   // Actions - viewport
   setStageScale: (scale: number) => void
   setStagePosition: (pos: { x: number; y: number }) => void
+  setLayerVisibility: (updates: Partial<LayerVisibility>) => void
 
   // Actions - project
   setCurrentProjectId: (id: string | null) => void
@@ -76,6 +103,8 @@ const initialProjectState = {
   projectName: 'Untitled Project',
   floorplanImage: null as HTMLImageElement | null,
   floorplanImageBlob: null as Blob | null,
+  floorplanOriginalBlob: null as Blob | null,
+  floorplanCropPixels: null as FloorplanCropPixels | null,
   calibration: null as Calibration | null,
   mode: 'default' as AppMode,
   calibrationPoints: [] as Array<{ x: number; y: number }>,
@@ -84,8 +113,12 @@ const initialProjectState = {
   cropEnd: null as { x: number; y: number } | null,
   placedFurniture: [] as PlacedFurniture[],
   selectedFurnitureId: null as string | null,
+  referenceLines: [] as ReferenceLine[],
+  referenceLinePoints: [] as Array<{ x: number; y: number }>,
+  selectedReferenceLineId: null as string | null,
   stageScale: 1,
   stagePosition: { x: 0, y: 0 },
+  layerVisibility: { ...defaultLayerVisibility },
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -94,18 +127,30 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Floorplan
   setFloorplanImage: (img, blob) =>
-    set({ floorplanImage: img, floorplanImageBlob: blob }),
+    set({
+      floorplanImage: img,
+      floorplanImageBlob: blob,
+      floorplanOriginalBlob: null,
+      floorplanCropPixels: null,
+    }),
+  setFloorplanComplete: (payload) => set(payload),
   clearFloorplan: () =>
     set({
       floorplanImage: null,
       floorplanImageBlob: null,
+      floorplanOriginalBlob: null,
+      floorplanCropPixels: null,
       calibration: null,
       calibrationPoints: [],
       measurementPoints: [],
+      referenceLinePoints: [],
       cropStart: null,
       cropEnd: null,
       placedFurniture: [],
       selectedFurnitureId: null,
+      referenceLines: [],
+      selectedReferenceLineId: null,
+      layerVisibility: { ...defaultLayerVisibility },
     }),
 
   // Calibration
@@ -114,6 +159,8 @@ export const useAppStore = create<AppState>((set) => ({
       mode,
       calibrationPoints: [],
       measurementPoints: [],
+      referenceLinePoints: [],
+      selectedReferenceLineId: null,
       cropStart: null,
       cropEnd: null,
     }),
@@ -132,6 +179,7 @@ export const useAppStore = create<AppState>((set) => ({
       mode: 'default',
       calibrationPoints: [],
       measurementPoints: [],
+      referenceLinePoints: [],
       cropStart: null,
       cropEnd: null,
     }),
@@ -140,6 +188,7 @@ export const useAppStore = create<AppState>((set) => ({
       calibration: null,
       calibrationPoints: [],
       measurementPoints: [],
+      referenceLinePoints: [],
       cropStart: null,
       cropEnd: null,
     }),
@@ -177,9 +226,37 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   setSelectedFurnitureId: (id) => set({ selectedFurnitureId: id }),
 
+  setReferenceLines: (lines) => set({ referenceLines: lines }),
+  setReferenceLineDraftPoints: (points) => set({ referenceLinePoints: points }),
+  addReferenceLineSegment: (point1, point2) =>
+    set((s) => ({
+      referenceLinePoints: [],
+      referenceLines: [
+        ...s.referenceLines,
+        { id: nanoid(), point1, point2 },
+      ],
+    })),
+  clearReferenceLines: () =>
+    set({
+      referenceLines: [],
+      referenceLinePoints: [],
+      selectedReferenceLineId: null,
+    }),
+  setSelectedReferenceLineId: (id) => set({ selectedReferenceLineId: id }),
+  removeReferenceLine: (id) =>
+    set((s) => ({
+      referenceLines: s.referenceLines.filter((l) => l.id !== id),
+      selectedReferenceLineId:
+        s.selectedReferenceLineId === id ? null : s.selectedReferenceLineId,
+    })),
+
   // Viewport
   setStageScale: (scale) => set({ stageScale: scale }),
   setStagePosition: (pos) => set({ stagePosition: pos }),
+  setLayerVisibility: (updates) =>
+    set((s) => ({
+      layerVisibility: { ...s.layerVisibility, ...updates },
+    })),
 
   // Project
   setCurrentProjectId: (id) => set({ currentProjectId: id }),

@@ -1,45 +1,84 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
-import { Download, Eraser, FolderOpen, Ruler, Save, X } from 'lucide-react'
-import ReactCrop, {
-  type Crop,
-  type PixelCrop,
-} from 'react-image-crop'
-import 'react-image-crop/dist/ReactCrop.css'
+import {
+  Anchor,
+  Download,
+  Eye,
+  FolderOpen,
+  Palette,
+  RotateCcw,
+  Ruler,
+  Save,
+  Settings2,
+} from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
-import { saveProject, saveImage } from '../db/projectStorage'
+import {
+  saveProject,
+  saveImage,
+  saveFloorplanOriginal,
+} from '../db/projectStorage'
 import { exportProject } from '../utils/export'
 import { ProjectListModal } from './Modals/ProjectListModal'
 import { Button } from './ui/Button'
+import { FloorplanModal } from './Modals/FloorplanModal'
 import type { ProjectRecord } from '../db/database'
+import type { FloorplanCropPixels, FurnitureTemplate } from '../types'
+import { renderCroppedFloorplan } from '../utils/floorplanImage'
+import { useHistoryStore } from '../stores/useHistoryStore'
 
 const LAST_PROJECT_KEY = 'floorplain:lastProjectId'
+const TOOL_ICON_SIZE = 16
+
+/** Active state for icon tools (reference line, measure, palette, visibility, etc.) */
+const TOOL_ACTIVE =
+  'bg-violet-600! text-white! hover:bg-violet-700!'
+const TOOL_IDLE =
+  'border border-zinc-300! text-zinc-700! hover:bg-zinc-50!'
+
+function groupLibraryByColor(library: FurnitureTemplate[]) {
+  const map = new Map<string, FurnitureTemplate[]>()
+  for (const t of library) {
+    const key = t.color.trim().toLowerCase()
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(t)
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, templates]) => ({
+      key,
+      displayColor: templates[0].color,
+      templates: [...templates].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
+    }))
+}
 
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const uploadPreviewImgRef = useRef<HTMLImageElement | null>(null)
   const saveFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showProjects, setShowProjects] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [showClearFurnitureConfirm, setShowClearFurnitureConfirm] = useState(false)
-  const [pendingUpload, setPendingUpload] = useState<{
-    file: File
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [batchByColorOpen, setBatchByColorOpen] = useState(false)
+  const batchByColorRef = useRef<HTMLDivElement>(null)
+  const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false)
+  const visibilityMenuRef = useRef<HTMLDivElement>(null)
+  const [floorplanModal, setFloorplanModal] = useState<{
+    mode: 'new' | 'configure'
     previewUrl: string
+    sourceBlob: Blob
+    initialNaturalCrop: FloorplanCropPixels | null
+    /** User picked a new image via Upload New; confirm will reset annotations */
+    pendingNewFloorplanUpload: boolean
   } | null>(null)
-  const [uploadCrop, setUploadCrop] = useState<Crop>({
-    unit: '%',
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 100,
-  })
-  const [uploadPixelCrop, setUploadPixelCrop] = useState<PixelCrop | null>(null)
 
   const floorplanImage = useAppStore((s) => s.floorplanImage)
   const floorplanImageBlob = useAppStore((s) => s.floorplanImageBlob)
+  const floorplanOriginalBlob = useAppStore((s) => s.floorplanOriginalBlob)
+  const floorplanCropPixels = useAppStore((s) => s.floorplanCropPixels)
   const mode = useAppStore((s) => s.mode)
   const calibration = useAppStore((s) => s.calibration)
-  const setFloorplanImage = useAppStore((s) => s.setFloorplanImage)
+  const setFloorplanComplete = useAppStore((s) => s.setFloorplanComplete)
   const setMode = useAppStore((s) => s.setMode)
   const clearCalibration = useAppStore((s) => s.clearCalibration)
   const setPlacedFurniture = useAppStore((s) => s.setPlacedFurniture)
@@ -54,14 +93,104 @@ export function Toolbar() {
   const setCurrentProjectId = useAppStore((s) => s.setCurrentProjectId)
   const placedFurniture = useAppStore((s) => s.placedFurniture)
   const furnitureLibrary = useAppStore((s) => s.furnitureLibrary)
+  const referenceLines = useAppStore((s) => s.referenceLines)
+  const clearReferenceLines = useAppStore((s) => s.clearReferenceLines)
+  const setSelectedReferenceLineId = useAppStore(
+    (s) => s.setSelectedReferenceLineId,
+  )
+  const addPlacedFurniture = useAppStore((s) => s.addPlacedFurniture)
+  const layerVisibility = useAppStore((s) => s.layerVisibility)
+  const setLayerVisibility = useAppStore((s) => s.setLayerVisibility)
+  const pushHistory = useHistoryStore((s) => s.push)
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const previewUrl = URL.createObjectURL(file)
-    setPendingUpload({ file, previewUrl })
-
+    setFloorplanModal({
+      mode: 'new',
+      previewUrl,
+      sourceBlob: file,
+      initialNaturalCrop: null,
+      pendingNewFloorplanUpload: false,
+    })
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const openConfigureFloorplan = () => {
+    const orig = floorplanOriginalBlob ?? floorplanImageBlob
+    if (!orig) return
+    const previewUrl = URL.createObjectURL(orig)
+    setFloorplanModal({
+      mode: 'configure',
+      previewUrl,
+      sourceBlob: orig,
+      initialNaturalCrop: floorplanCropPixels,
+      pendingNewFloorplanUpload: false,
+    })
+  }
+
+  const handleFloorplanUploadNew = (file: File) => {
+    setFloorplanModal((prev) => {
+      if (!prev) return prev
+      URL.revokeObjectURL(prev.previewUrl)
+      return {
+        ...prev,
+        previewUrl: URL.createObjectURL(file),
+        sourceBlob: file,
+        initialNaturalCrop: null,
+        pendingNewFloorplanUpload: true,
+      }
+    })
+  }
+
+  const cancelFloorplanModal = () => {
+    if (!floorplanModal) return
+    URL.revokeObjectURL(floorplanModal.previewUrl)
+    setFloorplanModal(null)
+  }
+
+  const commitFloorplanModal = async (
+    naturalCrop: FloorplanCropPixels,
+  ) => {
+    if (!floorplanModal) return
+    const {
+      previewUrl,
+      mode,
+      sourceBlob,
+      pendingNewFloorplanUpload,
+    } = floorplanModal
+    const resetAnnotations =
+      mode === 'new' || pendingNewFloorplanUpload
+    try {
+      const { image, blob } = await renderCroppedFloorplan(
+        sourceBlob,
+        naturalCrop,
+      )
+      setFloorplanComplete({
+        floorplanImage: image,
+        floorplanImageBlob: blob,
+        floorplanOriginalBlob: sourceBlob,
+        floorplanCropPixels: naturalCrop,
+      })
+    } finally {
+      URL.revokeObjectURL(previewUrl)
+      setFloorplanModal(null)
+    }
+    if (resetAnnotations) {
+      setMode('default')
+      resetCrop()
+      clearCalibration()
+      setPlacedFurniture([])
+      clearReferenceLines()
+      setSelectedFurnitureId(null)
+      setSelectedReferenceLineId(null)
+      setLayerVisibility({
+        furniture: true,
+        calibrationLine: true,
+        referenceLines: true,
+      })
+    }
   }
 
   useEffect(() => {
@@ -69,113 +198,20 @@ export function Toolbar() {
       if (saveFeedbackTimerRef.current) {
         clearTimeout(saveFeedbackTimerRef.current)
       }
-      if (pendingUpload) {
-        URL.revokeObjectURL(pendingUpload.previewUrl)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (floorplanModal) {
+        URL.revokeObjectURL(floorplanModal.previewUrl)
       }
     }
-  }, [pendingUpload])
-
-  const commitUpload = async () => {
-    if (!pendingUpload) return
-    const { file, previewUrl } = pendingUpload
-
-    const img = new Image()
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve()
-      img.onerror = reject
-      img.src = previewUrl
-    })
-
-    const pixelCrop = uploadPixelCrop
-    const isValidCrop =
-      pixelCrop &&
-      pixelCrop.width > 1 &&
-      pixelCrop.height > 1 &&
-      uploadPreviewImgRef.current
-
-    if (!isValidCrop) {
-      setFloorplanImage(img, file)
-    } else {
-      const sourceImg = uploadPreviewImgRef.current
-      if (!sourceImg) return
-      const scaleX = sourceImg.naturalWidth / sourceImg.width
-      const scaleY = sourceImg.naturalHeight / sourceImg.height
-      const sx = Math.round(pixelCrop.x * scaleX)
-      const sy = Math.round(pixelCrop.y * scaleY)
-      const sw = Math.round(pixelCrop.width * scaleX)
-      const sh = Math.round(pixelCrop.height * scaleY)
-
-      const canvas = document.createElement('canvas')
-      canvas.width = sw
-      canvas.height = sh
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-
-      ctx.drawImage(
-        sourceImg,
-        sx,
-        sy,
-        sw,
-        sh,
-        0,
-        0,
-        canvas.width,
-        canvas.height,
-      )
-
-      const croppedBlob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, 'image/png'),
-      )
-      if (!croppedBlob) return
-
-      const croppedImg = new Image()
-      const croppedUrl = URL.createObjectURL(croppedBlob)
-      await new Promise<void>((resolve, reject) => {
-        croppedImg.onload = () => resolve()
-        croppedImg.onerror = reject
-        croppedImg.src = croppedUrl
-      })
-      URL.revokeObjectURL(croppedUrl)
-      setFloorplanImage(croppedImg, croppedBlob)
-    }
-
-    setMode('default')
-    resetCrop()
-    clearCalibration()
-    setPlacedFurniture([])
-    setSelectedFurnitureId(null)
-    URL.revokeObjectURL(previewUrl)
-    setPendingUpload(null)
-  }
-
-  const cancelUpload = () => {
-    if (!pendingUpload) return
-    URL.revokeObjectURL(pendingUpload.previewUrl)
-    setPendingUpload(null)
-  }
-
-  const handleUploadPreviewLoad = (
-    e: React.SyntheticEvent<HTMLImageElement>,
-  ) => {
-    const { width, height } = e.currentTarget
-    uploadPreviewImgRef.current = e.currentTarget
-    setUploadCrop({
-      unit: '%',
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-    })
-    setUploadPixelCrop({
-      x: 0,
-      y: 0,
-      width,
-      height,
-      unit: 'px',
-    })
-  }
+  }, [floorplanModal])
 
   const handleCalibrateToggle = () => {
+    setBatchByColorOpen(false)
+    setVisibilityMenuOpen(false)
     if (mode === 'calibrating') {
       setMode('default')
     } else {
@@ -184,6 +220,8 @@ export function Toolbar() {
   }
 
   const handleMeasureToggle = () => {
+    setBatchByColorOpen(false)
+    setVisibilityMenuOpen(false)
     if (mode === 'measuring') {
       setMode('default')
     } else {
@@ -191,10 +229,98 @@ export function Toolbar() {
     }
   }
 
-  const handleClearPlacedFurniture = () => {
+  const handleReferenceLineToggle = () => {
+    setBatchByColorOpen(false)
+    setVisibilityMenuOpen(false)
+    if (mode === 'referenceLine') {
+      setMode('default')
+    } else {
+      setMode('referenceLine')
+    }
+  }
+
+  const handleResetCanvas = () => {
     setPlacedFurniture([])
+    clearReferenceLines()
     setSelectedFurnitureId(null)
-    setShowClearFurnitureConfirm(false)
+    setSelectedReferenceLineId(null)
+    setLayerVisibility({
+      furniture: true,
+      calibrationLine: true,
+      referenceLines: true,
+    })
+    setShowResetConfirm(false)
+  }
+
+  const colorGroups = useMemo(
+    () => groupLibraryByColor(furnitureLibrary),
+    [furnitureLibrary],
+  )
+
+  useEffect(() => {
+    if (!batchByColorOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (batchByColorRef.current?.contains(e.target as Node)) return
+      setBatchByColorOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBatchByColorOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [batchByColorOpen])
+
+  useEffect(() => {
+    if (!visibilityMenuOpen) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (visibilityMenuRef.current?.contains(e.target as Node)) return
+      setVisibilityMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVisibilityMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [visibilityMenuOpen])
+
+  const handlePlaceAllByColor = (templates: FurnitureTemplate[]) => {
+    if (!calibration || !floorplanImage || templates.length === 0) return
+    pushHistory([...useAppStore.getState().placedFurniture])
+    const cx = floorplanImage.width / 2
+    const cy = floorplanImage.height / 2
+    const n = templates.length
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n)))
+    const rows = Math.ceil(n / cols)
+    const spacing = 72
+    for (let i = 0; i < n; i++) {
+      const col = i % cols
+      const row = Math.floor(i / cols)
+      const x = cx + (col - (cols - 1) / 2) * spacing
+      const y = cy + (row - (rows - 1) / 2) * spacing
+      const t = templates[i]
+      addPlacedFurniture({
+        id: nanoid(),
+        templateId: t.id,
+        name: t.name,
+        widthCm: t.widthCm,
+        depthCm: t.depthCm,
+        color: t.color,
+        x,
+        y,
+        rotation: 0,
+      })
+    }
+    setSelectedFurnitureId(null)
+    setBatchByColorOpen(false)
+    setVisibilityMenuOpen(false)
   }
 
   const handleZoom = (direction: 'in' | 'out' | 'reset') => {
@@ -224,10 +350,15 @@ export function Toolbar() {
       updatedAt: Date.now(),
       calibration: calibration ?? undefined,
       placedFurniture,
+      referenceLines: referenceLines.length > 0 ? referenceLines : undefined,
+      floorplanCrop: floorplanCropPixels ?? undefined,
     }
     await saveProject(record)
     if (floorplanImageBlob) {
       await saveImage(pid, floorplanImageBlob)
+    }
+    if (floorplanOriginalBlob) {
+      await saveFloorplanOriginal(pid, floorplanOriginalBlob)
     }
 
     setSaveState('saved')
@@ -247,6 +378,9 @@ export function Toolbar() {
       placedFurniture,
       furnitureLibrary,
       floorplanImageBlob,
+      floorplanOriginalBlob,
+      floorplanCrop: floorplanCropPixels,
+      referenceLines: referenceLines.length > 0 ? referenceLines : undefined,
     })
   }
 
@@ -262,7 +396,7 @@ export function Toolbar() {
             type="text"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
-            className="w-44 rounded border border-transparent px-1.5 py-0.5 text-sm text-zinc-600 hover:border-zinc-300 focus:border-blue-400 focus:outline-none"
+            className="w-50 rounded border border-transparent px-1.5 py-0.5 text-sm text-zinc-600 hover:border-zinc-300 focus:border-blue-400 focus:outline-none"
           />
           <Button
             onClick={() => setShowProjects(true)}
@@ -310,14 +444,10 @@ export function Toolbar() {
             Upload Floorplan
           </Button>
         ) : (
-          <>
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              variant="base"
-            >
-              Replace Floorplan
-            </Button>
-          </>
+          <Button onClick={openConfigureFloorplan} variant="base">
+            <Settings2 size={14} />
+            <span className="ml-1">Floorplan</span>
+          </Button>
         )}
 
         {floorplanImage && (
@@ -334,7 +464,7 @@ export function Toolbar() {
               }
               className={`rounded px-3 py-1 text-sm font-medium ${
                 mode === 'calibrating'
-                  ? 'bg-amber-500! text-white! hover:bg-amber-600!'
+                  ? `${TOOL_ACTIVE}`
                   : calibration
                     ? 'border border-green-300! bg-green-50! text-green-700! hover:bg-green-100!'
                     : 'border'
@@ -356,28 +486,189 @@ export function Toolbar() {
 
             {/* Tools */}
             <div className="flex flex-1 items-center gap-2">
+              <Button
+                onClick={handleReferenceLineToggle}
+                size="icon"
+                className={`rounded px-2 py-1 text-sm font-medium ${
+                  mode === 'referenceLine' ? TOOL_ACTIVE : TOOL_IDLE
+                }`}
+                title="Reference line — click two points; distance uses calibration when set"
+                aria-label="Reference line"
+              >
+                <Anchor size={TOOL_ICON_SIZE} />
+              </Button>
               {calibration && (
                 <Button
                   onClick={handleMeasureToggle}
                   size="icon"
                   className={`rounded px-2 py-1 text-sm font-medium ${
-                    mode === 'measuring'
-                      ? 'bg-sky-500! text-white! hover:bg-sky-600!'
-                      : 'border border-zinc-300! text-zinc-700! hover:bg-zinc-50!'
+                    mode === 'measuring' ? TOOL_ACTIVE : TOOL_IDLE
                   }`}
                   title="Measure distance"
                   aria-label="Measure distance"
                 >
-                  <Ruler size={16} />
+                  <Ruler size={TOOL_ICON_SIZE} />
                 </Button>
               )}
+              {calibration && (
+                <div className="relative" ref={batchByColorRef}>
+                  <Button
+                    onClick={() => {
+                      const willOpen = !batchByColorOpen
+                      setVisibilityMenuOpen(false)
+                      if (
+                        willOpen &&
+                        (mode === 'measuring' || mode === 'referenceLine')
+                      ) {
+                        setMode('default')
+                      }
+                      setBatchByColorOpen((o) => !o)
+                    }}
+                    size="icon"
+                    disabled={furnitureLibrary.length === 0}
+                    className={`rounded px-2 py-1 text-sm font-medium ${
+                      batchByColorOpen ? TOOL_ACTIVE : TOOL_IDLE
+                    }`}
+                    title={
+                      furnitureLibrary.length === 0
+                        ? 'Add furniture in My Furniture first'
+                        : 'Place all library items of one color'
+                    }
+                    aria-label="Place all furniture by color"
+                    aria-expanded={batchByColorOpen}
+                    aria-haspopup="listbox"
+                  >
+                    <Palette size={TOOL_ICON_SIZE} />
+                  </Button>
+                  {batchByColorOpen && colorGroups.length > 0 && (
+                    <div
+                      className="absolute left-0 top-full z-50 mt-1 min-w-[220px] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg"
+                      role="listbox"
+                      aria-label="Choose color to place all matching furniture"
+                    >
+                      <p className="border-b border-zinc-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        Place all of color
+                      </p>
+                      <ul className="max-h-60 overflow-y-auto py-1">
+                        {colorGroups.map((g) => (
+                          <li key={g.key}>
+                            <button
+                              type="button"
+                              role="option"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                              onClick={() => handlePlaceAllByColor(g.templates)}
+                            >
+                              <span
+                                className="h-4 w-4 shrink-0 rounded-sm border border-zinc-200"
+                                style={{ backgroundColor: g.displayColor }}
+                              />
+                              <span className="flex-1 truncate">
+                                {g.templates.length} item
+                                {g.templates.length === 1 ? '' : 's'}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="relative" ref={visibilityMenuRef}>
+                <Button
+                  onClick={() => {
+                    const willOpen = !visibilityMenuOpen
+                    setBatchByColorOpen(false)
+                    if (
+                      willOpen &&
+                      (mode === 'measuring' || mode === 'referenceLine')
+                    ) {
+                      setMode('default')
+                    }
+                    setVisibilityMenuOpen((o) => !o)
+                  }}
+                  size="icon"
+                  className={`rounded px-2 py-1 text-sm font-medium ${
+                    visibilityMenuOpen ? TOOL_ACTIVE : TOOL_IDLE
+                  }`}
+                  title="Show or hide furniture, calibration, and reference lines"
+                  aria-label="Layer visibility"
+                  aria-expanded={visibilityMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  <Eye size={TOOL_ICON_SIZE} />
+                </Button>
+                {visibilityMenuOpen && (
+                  <div
+                    className="absolute right-0 top-full z-50 mt-1 w-56 rounded-lg border border-zinc-200 bg-white py-2 shadow-lg"
+                    role="menu"
+                    aria-label="Toggle layer visibility"
+                  >
+                    <p className="border-b border-zinc-100 px-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                      Visibility
+                    </p>
+                    <ul className="px-3 pt-1">
+                      <li>
+                        <label className="flex cursor-pointer items-center gap-2 py-2 text-sm text-zinc-700">
+                          <input
+                            type="checkbox"
+                            className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                            checked={layerVisibility.furniture}
+                            onChange={(e) =>
+                              setLayerVisibility({
+                                furniture: e.target.checked,
+                              })
+                            }
+                          />
+                          Furniture
+                        </label>
+                      </li>
+                      <li>
+                        <label className="flex cursor-pointer items-center gap-2 py-2 text-sm text-zinc-700">
+                          <input
+                            type="checkbox"
+                            className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                            checked={layerVisibility.calibrationLine}
+                            onChange={(e) =>
+                              setLayerVisibility({
+                                calibrationLine: e.target.checked,
+                              })
+                            }
+                          />
+                          Calibration line
+                        </label>
+                      </li>
+                      <li>
+                        <label className="flex cursor-pointer items-center gap-2 py-2 text-sm text-zinc-700">
+                          <input
+                            type="checkbox"
+                            className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                            checked={layerVisibility.referenceLines}
+                            onChange={(e) =>
+                              setLayerVisibility({
+                                referenceLines: e.target.checked,
+                              })
+                            }
+                          />
+                          Reference lines
+                        </label>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
               <Button
-                onClick={() => setShowClearFurnitureConfirm(true)}
+                onClick={() => {
+                  setBatchByColorOpen(false)
+                  setVisibilityMenuOpen(false)
+                  setShowResetConfirm(true)
+                }}
                 size="icon"
-                title="Clear all placed furniture"
-                aria-label="Clear all placed furniture"
+                className={`rounded px-2 py-1 text-sm font-medium ${TOOL_IDLE}`}
+                title="Reset — remove all placed furniture and reference lines"
+                aria-label="Reset floorplan annotations"
               >
-                <Eraser size={16} />
+                <RotateCcw size={TOOL_ICON_SIZE} />
               </Button>
             </div>
           </>
@@ -414,88 +705,55 @@ export function Toolbar() {
         onClose={() => setShowProjects(false)}
       />
 
-      {showClearFurnitureConfirm && (
+      {showResetConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/35"
-          onClick={() => setShowClearFurnitureConfirm(false)}
+          onClick={() => setShowResetConfirm(false)}
         >
           <div
             className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-semibold text-zinc-800">
-              Clear all placed furniture?
+              Reset floorplan annotations?
             </h3>
             <p className="mt-1 text-sm text-zinc-600">
-              This will remove all furniture currently placed on the floorplan.
+              This removes all placed furniture and all reference lines from the
+              current floorplan.
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <Button
-                onClick={() => setShowClearFurnitureConfirm(false)}
+                onClick={() => setShowResetConfirm(false)}
                 variant="base"
               >
                 Cancel
               </Button>
-              <Button onClick={handleClearPlacedFurniture} variant="destructive">
-                Clear all
+              <Button onClick={handleResetCanvas} variant="destructive">
+                Reset
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {pendingUpload && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35"
-          onClick={cancelUpload}
-        >
-          <div
-            className="w-full max-w-5xl rounded-xl bg-white p-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-zinc-800">
-                Upload Floorplan
-              </h3>
-              <Button
-                onClick={cancelUpload}
-                variant="base"
-                size="icon"
-                className="h-7 w-7 border-none text-zinc-400 hover:text-zinc-600"
-                aria-label="Close"
-              >
-                <X size={16} />
-              </Button>
-            </div>
-
-            <div className="mb-4 max-h-[68vh] overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2">
-              <div className="flex justify-center">
-                <ReactCrop
-                  crop={uploadCrop}
-                  onChange={(crop) => setUploadCrop(crop)}
-                  onComplete={(cropPx) => setUploadPixelCrop(cropPx)}
-                  keepSelection
-                >
-                  <img
-                    src={pendingUpload.previewUrl}
-                    alt="Floorplan preview"
-                    className="block h-auto max-h-[64vh] w-auto max-w-[calc(100vw-8rem)]"
-                    onLoad={handleUploadPreviewLoad}
-                  />
-                </ReactCrop>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <Button onClick={cancelUpload} variant="base">
-                Cancel
-              </Button>
-              <Button onClick={commitUpload} variant="primary">
-                Confirm
-              </Button>
-            </div>
-          </div>
-        </div>
+      {floorplanModal && (
+        <FloorplanModal
+          open
+          title={
+            floorplanModal.mode === 'configure'
+              ? 'Floorplan'
+              : 'Upload Floorplan'
+          }
+          previewUrl={floorplanModal.previewUrl}
+          initialNaturalCrop={floorplanModal.initialNaturalCrop}
+          showUploadNew={floorplanModal.mode === 'configure'}
+          showNewFloorplanWarning={floorplanModal.pendingNewFloorplanUpload}
+          onUploadNew={handleFloorplanUploadNew}
+          onClose={cancelFloorplanModal}
+          onConfirm={(naturalCrop) => {
+            void commitFloorplanModal(naturalCrop)
+          }}
+        />
       )}
     </>
   )

@@ -3,8 +3,8 @@ import { Toolbar } from './components/Toolbar'
 import { FurnitureLibrary } from './components/Sidebar/FurnitureLibrary'
 import { PlacedItemsList } from './components/Sidebar/PlacedItemsList'
 import { WorkspaceCanvas } from './components/Canvas/WorkspaceCanvas'
-import { CalibrationInput } from './components/Modals/CalibrationInput'
 import { SelectionToolbar } from './components/Canvas/SelectionToolbar'
+import { ReferenceLineToolbar } from './components/Canvas/ReferenceLineToolbar'
 import { useInitializeApp } from './hooks/useInitializeApp'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -47,8 +47,8 @@ function App() {
         {/* Canvas workspace */}
         <div className="relative flex flex-1">
           <WorkspaceCanvas />
-          <CalibrationInput />
           <SelectionToolbar />
+          <ReferenceLineToolbar />
         </div>
       </div>
     </div>

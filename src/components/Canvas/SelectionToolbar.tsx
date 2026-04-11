@@ -11,13 +11,14 @@ export function SelectionToolbar() {
   const calibration = useAppStore((s) => s.calibration)
   const stageScale = useAppStore((s) => s.stageScale)
   const stagePosition = useAppStore((s) => s.stagePosition)
+  const furnitureVisible = useAppStore((s) => s.layerVisibility.furniture)
   const updatePlacedFurniture = useAppStore((s) => s.updatePlacedFurniture)
   const removePlacedFurniture = useAppStore((s) => s.removePlacedFurniture)
   const addPlacedFurniture = useAppStore((s) => s.addPlacedFurniture)
 
   const pushHistory = useHistoryStore((s) => s.push)
 
-  if (!selectedFurnitureId || !calibration) return null
+  if (!furnitureVisible || !selectedFurnitureId || !calibration) return null
 
   const item = placedFurniture.find((f) => f.id === selectedFurnitureId)
   if (!item) return null

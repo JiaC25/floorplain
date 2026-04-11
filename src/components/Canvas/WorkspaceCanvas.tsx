@@ -6,8 +6,10 @@ import { FloorplanLayer } from './FloorplanLayer'
 import { CalibrationOverlay } from './CalibrationOverlay'
 import { FurnitureLayer } from './FurnitureLayer'
 import { MeasureOverlay } from './MeasureOverlay'
+import { ReferenceLinesOverlay } from './ReferenceLinesOverlay'
 import { pixelDistance, pixelsToCm } from '../../utils/coordinates'
 import { formatCm } from '../../utils/units'
+import { CalibrationInput } from '../Modals/CalibrationInput'
 
 const MIN_SCALE = 0.05
 const MAX_SCALE = 10
@@ -57,6 +59,14 @@ export function WorkspaceCanvas() {
   const setCropStart = useAppStore((s) => s.setCropStart)
   const setCropEnd = useAppStore((s) => s.setCropEnd)
   const setSelectedFurnitureId = useAppStore((s) => s.setSelectedFurnitureId)
+  const setSelectedReferenceLineId = useAppStore(
+    (s) => s.setSelectedReferenceLineId,
+  )
+  const referenceLinePoints = useAppStore((s) => s.referenceLinePoints)
+  const setReferenceLineDraftPoints = useAppStore(
+    (s) => s.setReferenceLineDraftPoints,
+  )
+  const addReferenceLineSegment = useAppStore((s) => s.addReferenceLineSegment)
 
   // Measure the container
   useEffect(() => {
@@ -168,9 +178,30 @@ export function WorkspaceCanvas() {
         return
       }
 
-      // Deselect furniture when clicking empty canvas
+      if (mode === 'referenceLine') {
+        const pointer = stage.getPointerPosition()
+        if (!pointer) return
+        const rawPoint = {
+          x: (pointer.x - stagePosition.x) / stageScale,
+          y: (pointer.y - stagePosition.y) / stageScale,
+        }
+        const shouldLock = 'shiftKey' in e.evt && e.evt.shiftKey
+        const draft = useAppStore.getState().referenceLinePoints
+
+        if (draft.length === 0) {
+          setReferenceLineDraftPoints([rawPoint])
+        } else {
+          const finalPoint = maybeLockToAxis(draft[0], rawPoint, shouldLock)
+          addReferenceLineSegment(draft[0], finalPoint)
+        }
+        setHoverStagePoint(null)
+        return
+      }
+
+      // Deselect when clicking empty canvas
       if (e.target === e.currentTarget || e.target.getClassName() === 'Image') {
         setSelectedFurnitureId(null)
+        setSelectedReferenceLineId(null)
       }
     },
     [
@@ -182,12 +213,18 @@ export function WorkspaceCanvas() {
       addCalibrationPoint,
       addMeasurementPoint,
       resetMeasurementPoints,
+      setReferenceLineDraftPoints,
+      addReferenceLineSegment,
       setSelectedFurnitureId,
+      setSelectedReferenceLineId,
     ],
   )
 
   const cursorStyle =
-    mode === 'calibrating' || mode === 'measuring' || mode === 'cropping'
+    mode === 'calibrating' ||
+    mode === 'measuring' ||
+    mode === 'referenceLine' ||
+    mode === 'cropping'
       ? 'crosshair'
       : floorplanImage
         ? 'grab'
@@ -219,6 +256,12 @@ export function WorkspaceCanvas() {
       )
       return
     }
+    if (mode === 'referenceLine' && referenceLinePoints.length === 1) {
+      setHoverStagePoint(
+        maybeLockToAxis(referenceLinePoints[0], stagePoint, shouldLock),
+      )
+      return
+    }
     if (mode === 'cropping' && isCroppingRef.current) {
       setCropEnd(stagePoint)
       return
@@ -231,6 +274,7 @@ export function WorkspaceCanvas() {
     mode,
     calibrationPoints,
     measurementPoints,
+    referenceLinePoints,
     setCropEnd,
     stagePosition,
     stageScale,
@@ -279,7 +323,12 @@ export function WorkspaceCanvas() {
           scaleY={stageScale}
           x={stagePosition.x}
           y={stagePosition.y}
-          draggable={mode !== 'calibrating' && mode !== 'measuring' && mode !== 'cropping'}
+          draggable={
+            mode !== 'calibrating' &&
+            mode !== 'measuring' &&
+            mode !== 'referenceLine' &&
+            mode !== 'cropping'
+          }
           onWheel={handleWheel}
           onClick={handleStageClick}
           onTap={handleStageClick}
@@ -300,6 +349,7 @@ export function WorkspaceCanvas() {
             <FloorplanLayer />
             <CalibrationOverlay />
             <MeasureOverlay />
+            <ReferenceLinesOverlay />
             {mode === 'calibrating' &&
               calibrationPoints.length === 1 &&
               hoverStagePoint && (
@@ -424,6 +474,83 @@ export function WorkspaceCanvas() {
                   )}
                 </>
               )}
+            {mode === 'referenceLine' &&
+              referenceLinePoints.length === 1 &&
+              hoverStagePoint && (
+                <>
+                  <Line
+                    points={[
+                      referenceLinePoints[0].x,
+                      referenceLinePoints[0].y,
+                      hoverStagePoint.x,
+                      hoverStagePoint.y,
+                    ]}
+                    stroke="#7c3aed"
+                    strokeWidth={2}
+                    dash={[6, 3]}
+                    listening={false}
+                  />
+                  <Rect
+                    x={
+                      (referenceLinePoints[0].x + hoverStagePoint.x) / 2 +
+                      4 / Math.max(stageScale, 0.05)
+                    }
+                    y={
+                      (referenceLinePoints[0].y + hoverStagePoint.y) / 2 -
+                      20 / Math.max(stageScale, 0.05)
+                    }
+                    width={Math.max(
+                      44 / Math.max(stageScale, 0.05),
+                      (calibration
+                        ? formatCm(
+                            pixelsToCm(
+                              pixelDistance(
+                                referenceLinePoints[0],
+                                hoverStagePoint,
+                              ),
+                              calibration,
+                            ),
+                          )
+                        : 'n/a'
+                      ).length *
+                        previewLabelFontSize *
+                        0.56 +
+                        previewLabelPaddingX * 2,
+                    )}
+                    height={previewLabelHeight}
+                    fill="rgba(255,255,255,0.72)"
+                    cornerRadius={6}
+                    listening={false}
+                  />
+                  <Text
+                    x={
+                      (referenceLinePoints[0].x + hoverStagePoint.x) / 2 +
+                      8 / Math.max(stageScale, 0.05)
+                    }
+                    y={
+                      (referenceLinePoints[0].y + hoverStagePoint.y) / 2 -
+                      18 / Math.max(stageScale, 0.05)
+                    }
+                    text={
+                      calibration
+                        ? formatCm(
+                            pixelsToCm(
+                              pixelDistance(
+                                referenceLinePoints[0],
+                                hoverStagePoint,
+                              ),
+                              calibration,
+                            ),
+                          )
+                        : 'n/a'
+                    }
+                    fontSize={previewLabelFontSize}
+                    fill="#6d28d9"
+                    fontStyle="bold"
+                    listening={false}
+                  />
+                </>
+              )}
             {mode === 'cropping' && cropStart && cropEnd && (
               <Rect
                 x={Math.min(cropStart.x, cropEnd.x)}
@@ -458,23 +585,36 @@ export function WorkspaceCanvas() {
         </div>
       )}
 
-      {mode === 'calibrating' && (
-        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
+      {mode === 'calibrating' && calibrationPoints.length < 2 && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
           {calibrationPoints.length === 0
             ? 'Click the first point of a known measurement'
-            : calibrationPoints.length === 1
-              ? 'Click the second point'
-              : 'Enter the real-world distance in meters'}
+            : 'Click the second point'}
         </div>
       )}
 
+      {containerSize.width > 0 && (
+        <CalibrationInput
+          containerWidth={containerSize.width}
+          containerHeight={containerSize.height}
+        />
+      )}
+
       {mode === 'measuring' && (
-        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
           {measurementPoints.length === 0
             ? 'Measure mode: click the first point'
             : measurementPoints.length === 1
               ? 'Click the second point'
               : 'Distance measured. Click again to start a new measurement'}
+        </div>
+      )}
+
+      {mode === 'referenceLine' && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          {referenceLinePoints.length === 0
+            ? 'Reference line: click the first point'
+            : 'Click the second point — line stays on the plan'}
         </div>
       )}
 

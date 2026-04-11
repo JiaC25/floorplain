@@ -26,6 +26,20 @@ export interface PlacedFurniture {
   rotation: number
 }
 
+export interface ReferenceLine {
+  id: string
+  point1: { x: number; y: number }
+  point2: { x: number; y: number }
+}
+
+/** Natural-pixel crop of the floorplan source image (see `floorplanImage.ts`). */
+export type FloorplanCropPixels = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface Project {
   id: string
   name: string
@@ -33,6 +47,27 @@ export interface Project {
   updatedAt: number
   calibration?: Calibration
   placedFurniture: PlacedFurniture[]
+  referenceLines?: ReferenceLine[]
+  /** Crop on the stored original floorplan image; omit for legacy projects. */
+  floorplanCrop?: FloorplanCropPixels
 }
 
-export type AppMode = 'default' | 'calibrating' | 'measuring' | 'cropping'
+export type AppMode =
+  | 'default'
+  | 'calibrating'
+  | 'measuring'
+  | 'referenceLine'
+  | 'cropping'
+
+/** Canvas overlay visibility (floorplan always visible). */
+export interface LayerVisibility {
+  furniture: boolean
+  calibrationLine: boolean
+  referenceLines: boolean
+}
+
+export const defaultLayerVisibility: LayerVisibility = {
+  furniture: true,
+  calibrationLine: true,
+  referenceLines: true,
+}

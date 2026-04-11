@@ -1,73 +1,39 @@
-# React + TypeScript + Vite
+# Floorplain
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A simple web tool to check whether **furniture fits** on a floorplan image. Typical uses: you are **looking at a new rental** and the listing includes a floorplan—you can see how pieces you already own (bed, desk, sofa, etc.) might fit before you move. Or you have a plan of **your current home** and want to **rearrange** furniture; you can lay out rectangles on the plan and move them around instead of only guessing.
 
-Currently, two official plugins are available:
+**Note:** Results depend on the plan being a fair representation of real dimensions. It does **not** work well when the floorplan is **not drawn to scale**, heavily **stylized**, or **distorted** (e.g. perspective or warped scans).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Everything runs in the browser; projects can be saved locally and exported/imported as JSON.
 
-## React Compiler
+## How to use
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Upload a floorplan** and crop to the area you care about.
+2. **Calibrate scale:** pick two points on the plan and enter the real distance between them (easiest: use a simple rectangular room whose dimensions you know from the listing or a tape measure).
+3. **Add furniture** as simple measured rectangles—bed, desk, sofa, wardrobe, and so on.
+4. **Place** them on the floorplan, **drag** to move, **rotate**, and see how everything fits.
 
-## Expanding the ESLint configuration
+## Tech stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Area | Choice |
+|------|--------|
+| UI | React 19, TypeScript, Tailwind CSS |
+| Build | Vite |
+| Canvas / stage | Konva, react-konva |
+| State | Zustand |
+| Local persistence | Dexie (IndexedDB) |
+| Cropping UI | react-image-crop |
+| Icons | lucide-react |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Scripts
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev      # dev server
+npm run build    # production build
+npm run preview  # preview production build
+npm run lint     # eslint
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Requirements
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- Node.js with npm (or compatible package manager)

@@ -8,6 +8,11 @@ export function CalibrationOverlay() {
   const calibrationPoints = useAppStore((s) => s.calibrationPoints)
   const mode = useAppStore((s) => s.mode)
   const stageScale = useAppStore((s) => s.stageScale)
+  const calibrationLineVisible = useAppStore(
+    (s) => s.layerVisibility.calibrationLine,
+  )
+
+  if (!calibrationLineVisible && mode !== 'calibrating') return null
 
   const pointsToRender =
     mode === 'calibrating'

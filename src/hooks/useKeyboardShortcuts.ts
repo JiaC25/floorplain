@@ -6,6 +6,10 @@ export function useKeyboardShortcuts() {
   const removePlacedFurniture = useAppStore((s) => s.removePlacedFurniture)
   const updatePlacedFurniture = useAppStore((s) => s.updatePlacedFurniture)
   const setSelectedFurnitureId = useAppStore((s) => s.setSelectedFurnitureId)
+  const setSelectedReferenceLineId = useAppStore(
+    (s) => s.setSelectedReferenceLineId,
+  )
+  const removeReferenceLine = useAppStore((s) => s.removeReferenceLine)
   const setPlacedFurniture = useAppStore((s) => s.setPlacedFurniture)
   const setMode = useAppStore((s) => s.setMode)
 
@@ -20,28 +24,33 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      const { selectedFurnitureId, placedFurniture, mode } =
+      const { selectedFurnitureId, selectedReferenceLineId, placedFurniture, mode } =
         useAppStore.getState()
 
-      // Escape - exit tool mode or deselect furniture
+      // Escape - exit tool mode or deselect
       if (e.key === 'Escape') {
         if (mode !== 'default') {
           setMode('default')
+        } else if (selectedReferenceLineId) {
+          setSelectedReferenceLineId(null)
         } else {
           setSelectedFurnitureId(null)
         }
         return
       }
 
-      // Delete/Backspace - remove selected furniture
-      if (
-        (e.key === 'Delete' || e.key === 'Backspace') &&
-        selectedFurnitureId
-      ) {
-        const history = useHistoryStore.getState()
-        history.push([...placedFurniture])
-        removePlacedFurniture(selectedFurnitureId)
-        return
+      // Delete/Backspace - remove selected reference line or furniture
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedReferenceLineId) {
+          removeReferenceLine(selectedReferenceLineId)
+          return
+        }
+        if (selectedFurnitureId) {
+          const history = useHistoryStore.getState()
+          history.push([...placedFurniture])
+          removePlacedFurniture(selectedFurnitureId)
+          return
+        }
       }
 
       // R - rotate selected furniture 45°
@@ -95,6 +104,8 @@ export function useKeyboardShortcuts() {
     removePlacedFurniture,
     updatePlacedFurniture,
     setSelectedFurnitureId,
+    setSelectedReferenceLineId,
+    removeReferenceLine,
     setPlacedFurniture,
     setMode,
   ])

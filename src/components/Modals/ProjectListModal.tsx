@@ -4,10 +4,14 @@ import { useAppStore } from '../../stores/useAppStore'
 import {
   loadAllProjects,
   loadProject,
-  loadImage,
   deleteProject,
 } from '../../db/projectStorage'
 import { importProject as importProjectFile } from '../../utils/export'
+import { hydrateFloorplanFromProject } from '../../utils/hydrateFloorplan'
+import {
+  fullNaturalCrop,
+  renderCroppedFloorplan,
+} from '../../utils/floorplanImage'
 import { saveTemplate } from '../../db/furnitureStorage'
 import { loadAllTemplates } from '../../db/furnitureStorage'
 import { Button } from '../ui/Button'
@@ -43,7 +47,8 @@ export function ProjectListModal({ open, onClose }: Props) {
   const setCalibration = useAppStore((s) => s.setCalibration)
   const clearCalibration = useAppStore((s) => s.clearCalibration)
   const setPlacedFurniture = useAppStore((s) => s.setPlacedFurniture)
-  const setFloorplanImage = useAppStore((s) => s.setFloorplanImage)
+  const setReferenceLines = useAppStore((s) => s.setReferenceLines)
+  const setFloorplanComplete = useAppStore((s) => s.setFloorplanComplete)
   const clearFloorplan = useAppStore((s) => s.clearFloorplan)
   const resetProject = useAppStore((s) => s.resetProject)
   const setFurnitureLibrary = useAppStore((s) => s.setFurnitureLibrary)
@@ -78,6 +83,7 @@ export function ProjectListModal({ open, onClose }: Props) {
     localStorage.setItem(LAST_PROJECT_KEY, project.id)
     setProjectName(project.name)
     setPlacedFurniture(project.placedFurniture)
+    setReferenceLines(project.referenceLines ?? [])
 
     if (project.calibration) {
       setCalibration(project.calibration)
@@ -85,13 +91,12 @@ export function ProjectListModal({ open, onClose }: Props) {
       clearCalibration()
     }
 
-    const blob = await loadImage(id)
-    if (blob) {
-      const img = await blobToImage(blob)
-      setFloorplanImage(img, blob)
-    } else {
-      clearFloorplan()
-    }
+    await hydrateFloorplanFromProject(
+      id,
+      project,
+      setFloorplanComplete,
+      clearFloorplan,
+    )
 
     setMode('default')
     onClose()
@@ -119,14 +124,27 @@ export function ProjectListModal({ open, onClose }: Props) {
       localStorage.setItem(LAST_PROJECT_KEY, id)
       setProjectName(data.name)
       setPlacedFurniture(data.placedFurniture)
+      setReferenceLines(data.referenceLines ?? [])
 
       if (data.calibration) {
         setCalibration(data.calibration)
       }
 
-      if (data.floorplanImageBlob) {
-        const img = await blobToImage(data.floorplanImageBlob)
-        setFloorplanImage(img, data.floorplanImageBlob)
+      if (data.floorplanOriginalBlob || data.floorplanImageBlob) {
+        const original =
+          data.floorplanOriginalBlob ?? data.floorplanImageBlob!
+        let crop = data.floorplanCrop
+        if (!crop) {
+          const img = await blobToImage(original)
+          crop = fullNaturalCrop(img)
+        }
+        const { image, blob } = await renderCroppedFloorplan(original, crop)
+        setFloorplanComplete({
+          floorplanImage: image,
+          floorplanImageBlob: blob,
+          floorplanOriginalBlob: original,
+          floorplanCropPixels: crop,
+        })
       }
 
       if (data.furnitureLibrary.length > 0) {

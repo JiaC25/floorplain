@@ -7,6 +7,9 @@ export function PlacedItemsList() {
   const placedFurniture = useAppStore((s) => s.placedFurniture)
   const selectedFurnitureId = useAppStore((s) => s.selectedFurnitureId)
   const setSelectedFurnitureId = useAppStore((s) => s.setSelectedFurnitureId)
+  const setSelectedReferenceLineId = useAppStore(
+    (s) => s.setSelectedReferenceLineId,
+  )
   const updatePlacedFurniture = useAppStore((s) => s.updatePlacedFurniture)
   const removePlacedFurniture = useAppStore((s) => s.removePlacedFurniture)
   const addPlacedFurniture = useAppStore((s) => s.addPlacedFurniture)
@@ -45,7 +48,10 @@ export function PlacedItemsList() {
           return (
             <li
               key={item.id}
-              onClick={() => setSelectedFurnitureId(item.id)}
+              onClick={() => {
+                setSelectedReferenceLineId(null)
+                setSelectedFurnitureId(item.id)
+              }}
               className={`flex cursor-pointer flex-col rounded border px-2 py-1.5 text-sm transition-colors ${
                 isSelected
                   ? 'border-blue-400 bg-blue-50'

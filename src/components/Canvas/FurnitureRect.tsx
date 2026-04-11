@@ -10,9 +10,13 @@ interface Props {
 }
 
 export function FurnitureRect({ item, calibration }: Props) {
+  const mode = useAppStore((s) => s.mode)
   const selectedFurnitureId = useAppStore((s) => s.selectedFurnitureId)
   const stageScale = useAppStore((s) => s.stageScale)
   const setSelectedFurnitureId = useAppStore((s) => s.setSelectedFurnitureId)
+  const setSelectedReferenceLineId = useAppStore(
+    (s) => s.setSelectedReferenceLineId,
+  )
   const updatePlacedFurniture = useAppStore((s) => s.updatePlacedFurniture)
   const pushHistory = useHistoryStore((s) => s.push)
 
@@ -26,6 +30,8 @@ export function FurnitureRect({ item, calibration }: Props) {
   const labelSize = Math.max(minReadableLabel, Math.max(8, Math.min(14, minDim / 4)))
   const dimsSize = Math.max(minReadableDims, Math.max(7, Math.min(11, minDim / 5)))
 
+  const interactive = mode === 'default'
+
   return (
     <Group
       x={item.x}
@@ -33,13 +39,16 @@ export function FurnitureRect({ item, calibration }: Props) {
       rotation={item.rotation}
       offsetX={widthPx / 2}
       offsetY={depthPx / 2}
-      draggable
+      listening={interactive}
+      draggable={interactive}
       onClick={(e) => {
         e.cancelBubble = true
+        setSelectedReferenceLineId(null)
         setSelectedFurnitureId(item.id)
       }}
       onTap={(e) => {
         e.cancelBubble = true
+        setSelectedReferenceLineId(null)
         setSelectedFurnitureId(item.id)
       }}
       onDragStart={() => {
